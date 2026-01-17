@@ -236,6 +236,16 @@ void QPdfViewPrivate::updateScrollBars()
     q->verticalScrollBar()->setPageStep(p.height());
 }
 
+static bool qHashEquals(const QPdfViewPrivate::RenderCacheKey &a, const QPdfViewPrivate::RenderCacheKey &b)
+{
+    return a.page == b.page;
+}
+
+static std::size_t qHash(const QPdfViewPrivate::RenderCacheKey &key, const std::size_t seed)
+{
+    return qHashMulti(seed, key.page);
+}
+
 void QPdfViewPrivate::pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId, QTime requestTimestamp)
 {
     Q_Q(QPdfView);
@@ -243,7 +253,7 @@ void QPdfViewPrivate::pageRendered(int pageNumber, QSize imageSize, const QImage
     Q_UNUSED(imageSize);
     Q_UNUSED(requestId);
 
-    m_renderCache.insert(pageNumber, new RenderCacheValue(image, requestTimestamp), image.sizeInBytes());
+    m_renderCache.insert(RenderCacheKey { pageNumber }, new RenderCacheValue(image, requestTimestamp), image.sizeInBytes());
     q->viewport()->update();
 }
 
@@ -685,7 +695,7 @@ void QPdfView::paintEvent(QPaintEvent *event)
             painter.fillRect(pageGeometry, Qt::white);
 
             const int page = it.key();
-            const QPdfViewPrivate::RenderCacheValue* value = d->m_renderCache.object(page);
+            const QPdfViewPrivate::RenderCacheValue* value = d->m_renderCache.object(QPdfViewPrivate::RenderCacheKey { page });
 
             if (value) {
                 painter.drawImage(pageGeometry, value->image);
