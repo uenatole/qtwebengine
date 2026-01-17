@@ -151,7 +151,7 @@ void QPdfViewPrivate::pageRendered(int pageNumber, QSize imageSize, const QImage
         m_cachedPagesLRU.append(pageNumber);
     }
 
-    m_pageCache.insert(pageNumber, image);
+    m_pageCache.insert(pageNumber, PageCacheEntry { image , false });
 
     q->viewport()->update();
 }
@@ -166,7 +166,10 @@ void QPdfViewPrivate::invalidatePageCache()
 {
     Q_Q(QPdfView);
 
-    m_pageCache.clear();
+    for (auto &[image, outdated] : m_pageCache) {
+        outdated = true;
+    }
+
     q->viewport()->update();
 }
 
@@ -589,6 +592,7 @@ void QPdfView::paintEvent(QPaintEvent *event)
 
     for (auto it = d->m_documentLayout.pageGeometryAndScale.cbegin();
          it != d->m_documentLayout.pageGeometryAndScale.cend(); ++it) {
+
         const QRect pageGeometry = it.value().first;
         if (pageGeometry.intersects(d->m_viewport)) { // page needs to be painted
             painter.fillRect(pageGeometry, Qt::white);
@@ -596,8 +600,12 @@ void QPdfView::paintEvent(QPaintEvent *event)
             const int page = it.key();
             const auto pageIt = d->m_pageCache.constFind(page);
             if (pageIt != d->m_pageCache.cend()) {
-                const QImage &img = pageIt.value();
+                const auto& [img, outdated] = pageIt.value();
                 painter.drawImage(pageGeometry, img);
+
+                if (outdated) {
+                    d->m_pageRenderer->requestPage(page, pageGeometry.size() * devicePixelRatioF());
+                }
             } else {
                 d->m_pageRenderer->requestPage(page, pageGeometry.size() * devicePixelRatioF());
             }

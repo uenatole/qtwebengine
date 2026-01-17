@@ -79,7 +79,13 @@ public:
 
     QRect m_viewport;
 
-    QHash<int, QImage> m_pageCache;
+    struct PageCacheEntry
+    {
+        QImage image;
+        bool outdated;
+    };
+
+    QHash<int, PageCacheEntry> m_pageCache;
     QList<int> m_cachedPagesLRU;
     int m_pageCacheLimit;
 
