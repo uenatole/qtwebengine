@@ -31,16 +31,40 @@ class QPdfViewPageRenderer : public QObject
     Q_OBJECT
 
 public:
-    explicit QPdfViewPageRenderer(QObject* parent = nullptr) : QObject(parent){}
+    explicit QPdfViewPageRenderer(QObject* parent = nullptr) : QObject(parent)
+    {
+        m_requestDelayTimer.setSingleShot(true);
+        connect(&m_requestDelayTimer, &QTimer::timeout, this, [&] {
+            tryDequeueRenderRequest();
+        });
+    }
 
     void setDocument(QPdfDocument* document)
     {
         m_document = document;
     }
 
+    void requestPageDelayed(int pageNumber, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions(), quint64 delayMs = 100)
+    {
+        if (const auto id = enqueuePageRenderRequest(pageNumber, imageSize, options); id) {
+            m_requestDelayTimer.start(delayMs);
+        }
+    }
+
     quint64 requestPage(int pageNumber, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions())
     {
-        if (!m_document )
+        if (const auto id = enqueuePageRenderRequest(pageNumber, imageSize, options); id) {
+            tryDequeueRenderRequest();
+        }
+    }
+
+Q_SIGNALS:
+    void pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId, QTime requestTimestamp);
+
+private:
+    quint64 enqueuePageRenderRequest(int pageNumber, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions())
+    {
+        if (!m_document)
             return 0;
 
         if (m_activeRequest && m_activeRequest->pageNumber == pageNumber) {
@@ -52,17 +76,11 @@ public:
             return it->id;
         }
 
-        const auto& request = m_requests.emplace_back(m_requestIdCounter++, pageNumber, imageSize, options);
-        tryActivateNextRequest();
-
+        const auto& request = m_requests.emplace_back(++m_requestIdCounter, pageNumber, imageSize, options);
         return request.id;
     }
 
-Q_SIGNALS:
-    void pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId, QTime requestTimestamp);
-
-private:
-    void tryActivateNextRequest()
+    void tryDequeueRenderRequest()
     {
         if (m_requests.empty())
             return;
@@ -78,7 +96,7 @@ private:
         m_activeRequestJob.then([this, request](const QImage& image) {
             emit pageRendered(request.pageNumber, request.imageSize, image, request.id, request.timestamp);
             m_activeRequest = std::nullopt;
-            tryActivateNextRequest();
+            tryDequeueRenderRequest();
         });
     }
 
@@ -97,11 +115,13 @@ private:
 
     QPdfDocument* m_document = nullptr;
 
-    quint64 m_requestIdCounter = 1;
+    quint64 m_requestIdCounter = 0;
     QList<PageRequest> m_requests;
 
     std::optional<PageRequest> m_activeRequest;
     QFuture<QImage> m_activeRequestJob;
+
+    QTimer m_requestDelayTimer;
 };
 
 QPdfViewPrivate::QPdfViewPrivate(QPdfView *q)
@@ -678,10 +698,10 @@ void QPdfView::paintEvent(QPaintEvent *event)
                 painter.drawImage(pageGeometry, img);
 
                 if (timestamp < d->m_cacheLastOutdated) {
-                    d->m_pageRenderer->requestPage(page, pageGeometry.size() * devicePixelRatioF());
+                    d->m_pageRenderer->requestPageDelayed(page, pageGeometry.size() * devicePixelRatioF());
                 }
             } else {
-                d->m_pageRenderer->requestPage(page, pageGeometry.size() * devicePixelRatioF());
+                d->m_pageRenderer->requestPageDelayed(page, pageGeometry.size() * devicePixelRatioF());
             }
 
             const QTransform scaleTransform = d->screenScaleTransform(page);
