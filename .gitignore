@@ -1,3 +1,6 @@
+.idea/
+config.redo
+config.tests/
 .qmake.cache
 .qmake.stash
 src/3rdparty_upstream/patches

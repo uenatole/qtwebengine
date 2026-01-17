@@ -62,3 +62,5 @@ qt_webengine_configure_check_coin(coin.nodes
     "${QT_CONFIGURE_CHECK_qtwebengine_build}"
     "${QT_CONFIGURE_CHECK_qtpdf_build}"
 )
+
+add_subdirectory(examples)
