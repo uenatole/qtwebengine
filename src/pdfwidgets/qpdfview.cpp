@@ -64,6 +64,19 @@ Q_SIGNALS:
     void pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId, QTime requestTimestamp);
 
 private:
+    struct PageRenderRequest
+    {
+        PageRenderRequest(quint64 a, int b, QSize c, QPdfDocumentRenderOptions d)
+            : id(a), timestamp(QTime::currentTime()), pageNumber(b), imageSize(c), options(d){}
+
+        quint64 id;
+        QTime timestamp;
+
+        int pageNumber;
+        QSize imageSize;
+        QPdfDocumentRenderOptions options;
+    };
+
     quint64 enqueuePageRenderRequest(int pageNumber, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions())
     {
         if (!m_document)
@@ -90,7 +103,7 @@ private:
         if (!(m_activeRequestJob.isFinished() || m_activeRequestJob.isCanceled()))
             return;
 
-        const PageRequest request = m_requests.takeFirst();
+        const PageRenderRequest request = m_requests.takeFirst();
 
         m_activeRequest = request;
         m_activeRequestJob = m_document->renderAsync(request.pageNumber, request.imageSize, request.options);
@@ -102,25 +115,12 @@ private:
         });
     }
 
-    struct PageRequest
-    {
-        PageRequest(quint64 a, int b, QSize c, QPdfDocumentRenderOptions d)
-            : id(a), timestamp(QTime::currentTime()), pageNumber(b), imageSize(c), options(d){}
-
-        quint64 id;
-        QTime timestamp;
-
-        int pageNumber;
-        QSize imageSize;
-        QPdfDocumentRenderOptions options;
-    };
-
     QPdfDocument* m_document = nullptr;
 
     quint64 m_requestIdCounter = 0;
-    QList<PageRequest> m_requests;
+    QList<PageRenderRequest> m_requests;
 
-    std::optional<PageRequest> m_activeRequest;
+    std::optional<PageRenderRequest> m_activeRequest;
     QFuture<QImage> m_activeRequestJob;
 
     QTimer m_requestDelayTimer;
