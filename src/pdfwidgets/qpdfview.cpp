@@ -53,9 +53,11 @@ public:
 
     quint64 requestPage(int pageNumber, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions())
     {
-        if (const auto id = enqueuePageRenderRequest(pageNumber, imageSize, options); id) {
+        const auto id = enqueuePageRenderRequest(pageNumber, imageSize, options);
+        if (id) {
             tryDequeueRenderRequest();
         }
+        return id;
     }
 
 Q_SIGNALS:
@@ -94,8 +96,8 @@ private:
         m_activeRequestJob = m_document->renderAsync(request.pageNumber, request.imageSize, request.options);
 
         m_activeRequestJob.then([this, request](const QImage& image) {
-            emit pageRendered(request.pageNumber, request.imageSize, image, request.id, request.timestamp);
             m_activeRequest = std::nullopt;
+            emit pageRendered(request.pageNumber, request.imageSize, image, request.id, request.timestamp);
             tryDequeueRenderRequest();
         });
     }
@@ -254,10 +256,8 @@ void QPdfViewPrivate::pageRendered(int pageNumber, QSize imageSize, const QImage
 
 void QPdfViewPrivate::invalidateDocumentLayout()
 {
-    m_cacheLastOutdated = QTime::currentTime();
     updateDocumentLayout();
-    Q_Q(QPdfView);
-    q->viewport()->update();
+    invalidatePageCache();
 }
 
 void QPdfViewPrivate::invalidatePageCache()
