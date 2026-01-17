@@ -1,1 +1,2 @@
 qt_internal_add_example(pdfviewer)
+qt_internal_add_example(pdfzoom)
