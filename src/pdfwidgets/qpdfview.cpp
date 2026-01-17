@@ -78,7 +78,7 @@ private:
             return it->id;
         }
 
-        const auto& request = m_requests.emplace_back(++m_requestIdCounter, pageNumber, imageSize, options);
+        const auto& request = m_requests.emplaceFront(++m_requestIdCounter, pageNumber, imageSize, options);
         return request.id;
     }
 
