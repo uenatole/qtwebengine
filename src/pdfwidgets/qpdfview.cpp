@@ -108,10 +108,12 @@ private:
         m_activeRequest = request;
         m_activeRequestJob = m_document->renderAsync(request.pageNumber, request.imageSize, request.options);
 
-        m_activeRequestJob.then([this, request](const QImage& image) {
-            m_activeRequest = std::nullopt;
-            emit pageRendered(request.pageNumber, request.imageSize, image, request.id, request.timestamp);
-            tryDequeueRenderRequest();
+        m_activeRequestJob.then([pThis = QPointer(this), request](const QImage& image) {
+            if (pThis) {
+                pThis->m_activeRequest = std::nullopt;
+                emit pThis->pageRendered(request.pageNumber, request.imageSize, image, request.id, request.timestamp);
+                pThis->tryDequeueRenderRequest();
+            }
         });
     }
 
