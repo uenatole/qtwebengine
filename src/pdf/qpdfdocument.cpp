@@ -974,6 +974,74 @@ QImage QPdfDocument::render(int page, QSize imageSize, QPdfDocumentRenderOptions
     return result;
 }
 
+#include <QtConcurrent/QtConcurrentRun>
+#include "third_party/pdfium/public/fpdf_progressive.h"
+
+// NOTE: QPdfDocument is one-per-thread object so renderAsync is used only to provide cancellable rendering method.
+QFuture<QImage> QPdfDocument::renderAsync(int page, QSize imageSize, QPdfDocumentRenderOptions renderOptions) const
+{
+    if (!d->doc || !d->checkPageComplete(page))
+        return QtFuture::makeReadyValueFuture(QImage());
+
+    return QtConcurrent::run([this, page, imageSize, renderOptions](QPromise<QImage>& promise) {
+        const QPdfMutexLocker lock;
+
+        FPDF_PAGE pdfPage = FPDF_LoadPage(d->doc, page);
+        if (!pdfPage) return;
+
+        const QPdfDocumentRenderOptions::RenderFlags renderFlags = renderOptions.renderFlags();
+        int flags = 0;
+        if (renderFlags & QPdfDocumentRenderOptions::RenderFlag::Annotations)
+            flags |= FPDF_ANNOT;
+        if (renderFlags & QPdfDocumentRenderOptions::RenderFlag::OptimizedForLcd)
+            flags |= FPDF_LCD_TEXT;
+        if (renderFlags & QPdfDocumentRenderOptions::RenderFlag::Grayscale)
+            flags |= FPDF_GRAYSCALE;
+        if (renderFlags & QPdfDocumentRenderOptions::RenderFlag::ForceHalftone)
+            flags |= FPDF_RENDER_FORCEHALFTONE;
+        if (renderFlags & QPdfDocumentRenderOptions::RenderFlag::TextAliased)
+            flags |= FPDF_RENDER_NO_SMOOTHTEXT;
+        if (renderFlags & QPdfDocumentRenderOptions::RenderFlag::ImageAliased)
+            flags |= FPDF_RENDER_NO_SMOOTHIMAGE;
+        if (renderFlags & QPdfDocumentRenderOptions::RenderFlag::PathAliased)
+            flags |= FPDF_RENDER_NO_SMOOTHPATH;
+
+        QRect region;
+        if (const auto clipRect = renderOptions.scaledClipRect(); clipRect.isValid()) {
+            region = { clipRect.left(), clipRect.top(), clipRect.width(), clipRect.height() };
+        }
+        else {
+            region = { 0, 0, imageSize.width(), imageSize.height() };
+        }
+
+        IFSDK_PAUSE pause;
+        pause.version = 1;
+        pause.user = &promise;
+
+        // Link IFSDK_PAUSE interface with QFuture cancellation interface
+        pause.NeedToPauseNow = [](IFSDK_PAUSE* pause) -> FPDF_BOOL {
+            const auto p = static_cast<QPromise<QImage>*>(pause->user);
+            return p->isCanceled();
+        };
+
+        QImage result(imageSize, QImage::Format_ARGB32);
+        result.fill(Qt::transparent);
+        FPDF_BITMAP bitmap = FPDFBitmap_CreateEx(result.width(), result.height(), FPDFBitmap_BGRA, result.bits(), result.bytesPerLine());
+
+        auto ret = FPDF_RenderPageBitmap_Start(bitmap, pdfPage, region.left(), region.top(), region.width(), region.height(), 0, flags, &pause);
+
+        // TODO: process other (ret) statuses
+
+        if (ret == FPDF_RENDER_DONE) {
+            FPDF_RenderPage_Close(pdfPage);
+            promise.addResult(result);
+        }
+
+        FPDFBitmap_Destroy(bitmap);
+        FPDF_ClosePage(pdfPage);
+    });
+}
+
 /*!
     Returns information about the text on the given \a page that can be found
     between the given \a start and \a end points, if any.

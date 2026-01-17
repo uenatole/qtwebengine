@@ -11,6 +11,7 @@
 #include <QtGui/qimage.h>
 #include <QtPdf/qpdfdocumentrenderoptions.h>
 #include <QtPdf/qpdfselection.h>
+#include <QtCore/QFuture>
 
 QT_BEGIN_NAMESPACE
 
@@ -94,6 +95,7 @@ public:
     QAbstractListModel *pageModel();
 
     QImage render(int page, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions());
+    QFuture<QImage> renderAsync(int page, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions()) const;
 
     Q_INVOKABLE QPdfSelection getSelection(int page, QPointF start, QPointF end);
     Q_INVOKABLE QPdfSelection getSelectionAtIndex(int page, int startIndex, int maxLength);
