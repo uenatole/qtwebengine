@@ -24,7 +24,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class QPdfPageRenderer;
+class QPdfViewPageRenderer;
 
 class QPdfViewPrivate
 {
@@ -40,7 +40,7 @@ public:
     void setViewport(QRect viewport);
     void updateScrollBars();
 
-    void pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId);
+    void pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId, QTime requestTimestamp);
     void invalidateDocumentLayout();
     void invalidatePageCache();
 
@@ -61,7 +61,7 @@ public:
     QPointer<QPdfDocument> m_document;
     QPointer<QPdfSearchModel> m_searchModel;
     QPdfPageNavigator* m_pageNavigator;
-    QPdfPageRenderer *m_pageRenderer;
+    QPdfViewPageRenderer *m_pageRenderer;
     QPdfLinkModel m_linkModel;
 
     QPdfView::PageMode m_pageMode;
@@ -81,10 +81,13 @@ public:
 
     struct PageCacheEntry
     {
+        explicit PageCacheEntry(const QImage& image, QTime time) : image(image), timestamp(time) {}
+
         QImage image;
-        bool outdated;
+        QTime timestamp;
     };
 
+    QTime m_cacheLastOutdated;
     QHash<int, PageCacheEntry> m_pageCache;
     QList<int> m_cachedPagesLRU;
     int m_pageCacheLimit;

@@ -26,6 +26,84 @@ static const QColor SearchResultHighlight("#80B0C4DE");
 static const QColor CurrentSearchResultHighlight(Qt::cyan);
 static const int CurrentSearchResultWidth(2);
 
+class QPdfViewPageRenderer : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit QPdfViewPageRenderer(QObject* parent = nullptr) : QObject(parent){}
+
+    void setDocument(QPdfDocument* document)
+    {
+        m_document = document;
+    }
+
+    quint64 requestPage(int pageNumber, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions())
+    {
+        if (!m_document )
+            return 0;
+
+        if (m_activeRequest && m_activeRequest->pageNumber == pageNumber) {
+            m_activeRequestJob.cancel();
+        }
+        else if (const auto it = std::find_if(m_requests.begin(), m_requests.end(), [&](const auto& request){ return request.pageNumber == pageNumber; }); it != m_requests.end()) {
+            it->imageSize = imageSize;
+            it->options = options;
+            return it->id;
+        }
+
+        const auto& request = m_requests.emplace_back(m_requestIdCounter++, pageNumber, imageSize, options);
+        tryActivateNextRequest();
+
+        return request.id;
+    }
+
+Q_SIGNALS:
+    void pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId, QTime requestTimestamp);
+
+private:
+    void tryActivateNextRequest()
+    {
+        if (m_requests.empty())
+            return;
+
+        if (!(m_activeRequestJob.isFinished() || m_activeRequestJob.isCanceled()))
+            return;
+
+        const PageRequest request = m_requests.takeFirst();
+
+        m_activeRequest = request;
+        m_activeRequestJob = m_document->renderAsync(request.pageNumber, request.imageSize, request.options);
+
+        m_activeRequestJob.then([this, request](const QImage& image) {
+            emit pageRendered(request.pageNumber, request.imageSize, image, request.id, request.timestamp);
+            m_activeRequest = std::nullopt;
+            tryActivateNextRequest();
+        });
+    }
+
+    struct PageRequest
+    {
+        PageRequest(quint64 a, int b, QSize c, QPdfDocumentRenderOptions d)
+            : id(a), timestamp(QTime::currentTime()), pageNumber(b), imageSize(c), options(d){}
+
+        quint64 id;
+        QTime timestamp;
+
+        int pageNumber;
+        QSize imageSize;
+        QPdfDocumentRenderOptions options;
+    };
+
+    QPdfDocument* m_document = nullptr;
+
+    quint64 m_requestIdCounter = 1;
+    QList<PageRequest> m_requests;
+
+    std::optional<PageRequest> m_activeRequest;
+    QFuture<QImage> m_activeRequestJob;
+};
+
 QPdfViewPrivate::QPdfViewPrivate(QPdfView *q)
     : q_ptr(q)
     , m_document(nullptr)
@@ -47,8 +125,7 @@ void QPdfViewPrivate::init()
     Q_Q(QPdfView);
 
     m_pageNavigator = new QPdfPageNavigator(q);
-    m_pageRenderer = new QPdfPageRenderer(q);
-    m_pageRenderer->setRenderMode(QPdfPageRenderer::RenderMode::MultiThreaded);
+    m_pageRenderer = new QPdfViewPageRenderer(q);
 }
 
 void QPdfViewPrivate::documentStatusChanged()
@@ -137,7 +214,7 @@ void QPdfViewPrivate::updateScrollBars()
     q->verticalScrollBar()->setPageStep(p.height());
 }
 
-void QPdfViewPrivate::pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId)
+void QPdfViewPrivate::pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId, QTime requestTimestamp)
 {
     Q_Q(QPdfView);
 
@@ -151,25 +228,22 @@ void QPdfViewPrivate::pageRendered(int pageNumber, QSize imageSize, const QImage
         m_cachedPagesLRU.append(pageNumber);
     }
 
-    m_pageCache.insert(pageNumber, PageCacheEntry { image , false });
-
+    m_pageCache.insert(pageNumber, PageCacheEntry(image, requestTimestamp));
     q->viewport()->update();
 }
 
 void QPdfViewPrivate::invalidateDocumentLayout()
 {
+    m_cacheLastOutdated = QTime::currentTime();
     updateDocumentLayout();
-    invalidatePageCache();
+    Q_Q(QPdfView);
+    q->viewport()->update();
 }
 
 void QPdfViewPrivate::invalidatePageCache()
 {
     Q_Q(QPdfView);
-
-    for (auto &[image, outdated] : m_pageCache) {
-        outdated = true;
-    }
-
+    m_cacheLastOutdated = QTime::currentTime();
     q->viewport()->update();
 }
 
@@ -183,7 +257,7 @@ QPdfViewPrivate::DocumentLayout QPdfViewPrivate::calculateDocumentLayout() const
 
     DocumentLayout documentLayout;
 
-    if (!m_document || m_document->status() != QPdfDocument::Status::Ready)
+    if (!m_document /*|| m_document->status() != QPdfDocument::Status::Ready*/)
         return documentLayout;
 
     QHash<int, QPair<QRect, qreal>> pageGeometryAndScale;
@@ -305,9 +379,9 @@ QPdfView::QPdfView(QWidget *parent)
     connect(d->m_pageNavigator, &QPdfPageNavigator::currentPageChanged, this,
             [d](int page){ d->currentPageChanged(page); });
 
-    connect(d->m_pageRenderer, &QPdfPageRenderer::pageRendered, this,
-            [d](int pageNumber, QSize imageSize, const QImage &image, QPdfDocumentRenderOptions, quint64 requestId) {
-                d->pageRendered(pageNumber, imageSize, image, requestId); });
+    connect(d->m_pageRenderer, &QPdfViewPageRenderer::pageRendered, this, [d](int pageNumber, QSize imageSize, const QImage& image, quint64 requestId, QTime requestTimestamp) {
+        d->pageRendered(pageNumber, imageSize, image, requestId, requestTimestamp);
+    });
 
     verticalScrollBar()->setSingleStep(20);
     horizontalScrollBar()->setSingleStep(20);
@@ -600,10 +674,10 @@ void QPdfView::paintEvent(QPaintEvent *event)
             const int page = it.key();
             const auto pageIt = d->m_pageCache.constFind(page);
             if (pageIt != d->m_pageCache.cend()) {
-                const auto& [img, outdated] = pageIt.value();
+                const auto& [img, timestamp] = pageIt.value();
                 painter.drawImage(pageGeometry, img);
 
-                if (outdated) {
+                if (timestamp < d->m_cacheLastOutdated) {
                     d->m_pageRenderer->requestPage(page, pageGeometry.size() * devicePixelRatioF());
                 }
             } else {
@@ -720,4 +794,5 @@ void QPdfView::mouseReleaseEvent(QMouseEvent *event)
 
 QT_END_NAMESPACE
 
+#include "qpdfview.moc"
 #include "moc_qpdfview.cpp"
