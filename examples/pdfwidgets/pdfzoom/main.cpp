@@ -54,6 +54,8 @@ int main(int argc, char** argv)
 
     CustomPdfView view;
     view.setGeometry(QRect(0, 0, 640, 480));
+    view.setPageMode(QPdfView::PageMode::MultiPage);
+    view.setTransformationAnchor(QPdfView::ViewportAnchor::AnchorUnderMouse);
     view.setDocument(&document);
     view.show();
 

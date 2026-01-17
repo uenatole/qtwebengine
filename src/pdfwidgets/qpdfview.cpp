@@ -136,6 +136,7 @@ QPdfViewPrivate::QPdfViewPrivate(QPdfView *q)
     , m_pageMode(QPdfView::PageMode::SinglePage)
     , m_zoomMode(QPdfView::ZoomMode::Custom)
     , m_zoomFactor(1.0)
+    , m_transformationAnchor(QPdfView::ViewportAnchor::NoAnchor)
     , m_pageSpacing(3)
     , m_documentMargins(6, 6, 6, 6)
     , m_blockPageScrolling(false)
@@ -236,6 +237,37 @@ void QPdfViewPrivate::updateScrollBars()
     q->horizontalScrollBar()->setPageStep(p.width());
     q->verticalScrollBar()->setRange(0, v.height() - p.height());
     q->verticalScrollBar()->setPageStep(p.height());
+}
+
+void QPdfViewPrivate::updateScrollBarsValues(QSize prevDocumentSize)
+{
+    Q_Q(QPdfView);
+    const QSize documentSize = m_documentLayout.documentSize;
+
+    auto prevPosX = q->horizontalScrollBar()->value();
+    auto prevPosY = q->verticalScrollBar()->value();
+
+    switch (m_transformationAnchor) {
+    case QPdfView::ViewportAnchor::AnchorViewCenter: {
+        q->horizontalScrollBar()->setValue(q->horizontalScrollBar()->maximum() / 2);
+        break;
+    }
+    case QPdfView::ViewportAnchor::AnchorUnderMouse: {
+        QPoint mousePos = q->viewport()->mapFromGlobal(QCursor::pos());
+
+        qreal prevRelativeX = (prevPosX + mousePos.x()) / qreal(prevDocumentSize.width());
+        qreal prevRelativeY = (prevPosY + mousePos.y()) / qreal(prevDocumentSize.height());
+
+        int newPosX = qRound(prevRelativeX * documentSize.width() - mousePos.x());
+        int newPosY = qRound(prevRelativeY * documentSize.height() - mousePos.y());
+
+        q->horizontalScrollBar()->setValue(newPosX);
+        q->verticalScrollBar()->setValue(newPosY);
+
+        break;
+    }
+    default: break;
+    }
 }
 
 static bool qHashEquals(const QPdfViewPrivate::RenderCacheKey &a, const QPdfViewPrivate::RenderCacheKey &b)
@@ -373,9 +405,11 @@ QTransform QPdfViewPrivate::screenScaleTransform(int page) const
 
 void QPdfViewPrivate::updateDocumentLayout()
 {
+    auto prevDocumentSize = m_documentLayout.documentSize;
     m_documentLayout = calculateDocumentLayout();
 
     updateScrollBars();
+    updateScrollBarsValues(prevDocumentSize);
 }
 
 /*!
@@ -628,6 +662,12 @@ void QPdfView::setZoomFactor(qreal factor)
     d->invalidateDocumentLayout();
 
     emit zoomFactorChanged(d->m_zoomFactor);
+}
+
+void QPdfView::setTransformationAnchor(ViewportAnchor anchor)
+{
+    Q_D(QPdfView);
+    d->m_transformationAnchor = anchor;
 }
 
 /*!

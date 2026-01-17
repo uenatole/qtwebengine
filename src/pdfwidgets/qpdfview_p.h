@@ -39,6 +39,7 @@ public:
     void calculateViewport();
     void setViewport(QRect viewport);
     void updateScrollBars();
+    void updateScrollBarsValues(QSize prevDocumentSize);
 
     void pageRendered(int pageNumber, QSize imageSize, const QImage &image, quint64 requestId, QTime requestTimestamp);
     void invalidateDocumentLayout();
@@ -67,6 +68,7 @@ public:
     QPdfView::PageMode m_pageMode;
     QPdfView::ZoomMode m_zoomMode;
     qreal m_zoomFactor;
+    QPdfView::ViewportAnchor m_transformationAnchor;
 
     int m_currentSearchResultIndex = -1;
 
