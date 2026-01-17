@@ -79,18 +79,16 @@ public:
 
     QRect m_viewport;
 
-    struct PageCacheEntry
+    struct RenderCacheValue
     {
-        explicit PageCacheEntry(const QImage& image, QTime time) : image(image), timestamp(time) {}
+        explicit RenderCacheValue(const QImage& image, QTime time) : image(image), timestamp(time) {}
 
         QImage image;
         QTime timestamp;
     };
 
-    QTime m_cacheLastOutdated;
-    QHash<int, PageCacheEntry> m_pageCache;
-    QList<int> m_cachedPagesLRU;
-    int m_pageCacheLimit;
+    QTime m_renderCacheLastOutdated;
+    QCache<int, RenderCacheValue> m_renderCache;
 
     DocumentLayout m_documentLayout;
 

@@ -137,7 +137,7 @@ QPdfViewPrivate::QPdfViewPrivate(QPdfView *q)
     , m_pageSpacing(3)
     , m_documentMargins(6, 6, 6, 6)
     , m_blockPageScrolling(false)
-    , m_pageCacheLimit(20)
+    , m_renderCache(500 * 1024 * 1024) // 500 MiB
     , m_screenResolution(QGuiApplication::primaryScreen()->logicalDotsPerInch() / 72.0)
 {
 }
@@ -243,14 +243,7 @@ void QPdfViewPrivate::pageRendered(int pageNumber, QSize imageSize, const QImage
     Q_UNUSED(imageSize);
     Q_UNUSED(requestId);
 
-    if (!m_cachedPagesLRU.contains(pageNumber)) {
-        if (m_cachedPagesLRU.size() > m_pageCacheLimit)
-            m_pageCache.remove(m_cachedPagesLRU.takeFirst());
-
-        m_cachedPagesLRU.append(pageNumber);
-    }
-
-    m_pageCache.insert(pageNumber, PageCacheEntry(image, requestTimestamp));
+    m_renderCache.insert(pageNumber, new RenderCacheValue(image, requestTimestamp), image.sizeInBytes());
     q->viewport()->update();
 }
 
@@ -263,7 +256,7 @@ void QPdfViewPrivate::invalidateDocumentLayout()
 void QPdfViewPrivate::invalidatePageCache()
 {
     Q_Q(QPdfView);
-    m_cacheLastOutdated = QTime::currentTime();
+    m_renderCacheLastOutdated = QTime::currentTime();
     q->viewport()->update();
 }
 
@@ -692,15 +685,13 @@ void QPdfView::paintEvent(QPaintEvent *event)
             painter.fillRect(pageGeometry, Qt::white);
 
             const int page = it.key();
-            const auto pageIt = d->m_pageCache.constFind(page);
-            if (pageIt != d->m_pageCache.cend()) {
-                const auto& [img, timestamp] = pageIt.value();
-                painter.drawImage(pageGeometry, img);
+            const QPdfViewPrivate::RenderCacheValue* value = d->m_renderCache.object(page);
 
-                if (timestamp < d->m_cacheLastOutdated) {
-                    d->m_pageRenderer->requestPageDelayed(page, pageGeometry.size() * devicePixelRatioF());
-                }
-            } else {
+            if (value) {
+                painter.drawImage(pageGeometry, value->image);
+            }
+
+            if (!value || value->timestamp < d->m_renderCacheLastOutdated) {
                 d->m_pageRenderer->requestPageDelayed(page, pageGeometry.size() * devicePixelRatioF());
             }
 
