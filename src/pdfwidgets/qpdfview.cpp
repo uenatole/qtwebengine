@@ -244,26 +244,29 @@ void QPdfViewPrivate::updateScrollBarsValues(QSize prevDocumentSize)
     Q_Q(QPdfView);
     const QSize documentSize = m_documentLayout.documentSize;
 
-    auto prevPosX = q->horizontalScrollBar()->value();
-    auto prevPosY = q->verticalScrollBar()->value();
+    auto doAnchor = [&q, &prevDocumentSize, &documentSize](QPoint anchorPos)  {
+        auto viewportX1 = q->horizontalScrollBar()->value();
+        auto viewportY1 = q->verticalScrollBar()->value();
+
+        qreal prevRelativeX = (viewportX1 + anchorPos.x()) / qreal(prevDocumentSize.width());
+        qreal prevRelativeY = (viewportY1 + anchorPos.y()) / qreal(prevDocumentSize.height());
+
+        int viewportX2 = qRound(prevRelativeX * documentSize.width() - anchorPos.x());
+        int viewportY2 = qRound(prevRelativeY * documentSize.height() - anchorPos.y());
+
+        q->horizontalScrollBar()->setValue(viewportX2);
+        q->verticalScrollBar()->setValue(viewportY2);
+    };
 
     switch (m_transformationAnchor) {
     case QPdfView::ViewportAnchor::AnchorViewCenter: {
-        q->horizontalScrollBar()->setValue(q->horizontalScrollBar()->maximum() / 2);
+        const QPoint centerPos(q->viewport()->width() / 2.0, q->viewport()->height() / 2.0);
+        doAnchor(centerPos);
         break;
     }
     case QPdfView::ViewportAnchor::AnchorUnderMouse: {
-        QPoint mousePos = q->viewport()->mapFromGlobal(QCursor::pos());
-
-        qreal prevRelativeX = (prevPosX + mousePos.x()) / qreal(prevDocumentSize.width());
-        qreal prevRelativeY = (prevPosY + mousePos.y()) / qreal(prevDocumentSize.height());
-
-        int newPosX = qRound(prevRelativeX * documentSize.width() - mousePos.x());
-        int newPosY = qRound(prevRelativeY * documentSize.height() - mousePos.y());
-
-        q->horizontalScrollBar()->setValue(newPosX);
-        q->verticalScrollBar()->setValue(newPosY);
-
+        const QPoint mousePos = q->viewport()->mapFromGlobal(QCursor::pos());
+        doAnchor(mousePos);
         break;
     }
     default: break;
