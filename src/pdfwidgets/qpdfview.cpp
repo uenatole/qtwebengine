@@ -26,12 +26,12 @@ static const QColor SearchResultHighlight("#80B0C4DE");
 static const QColor CurrentSearchResultHighlight(Qt::cyan);
 static const int CurrentSearchResultWidth(2);
 
-class QPdfViewPageRenderer : public QObject
+class QPdfViewAsyncPageRenderer : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit QPdfViewPageRenderer(QObject* parent = nullptr) : QObject(parent)
+    explicit QPdfViewAsyncPageRenderer(QObject* parent = nullptr) : QObject(parent)
     {
         m_requestDelayTimer.setSingleShot(true);
         connect(&m_requestDelayTimer, &QTimer::timeout, this, [&] {
@@ -66,8 +66,8 @@ Q_SIGNALS:
 private:
     struct PageRenderRequest
     {
-        PageRenderRequest(quint64 a, int b, QSize c, QPdfDocumentRenderOptions d)
-            : id(a), timestamp(QTime::currentTime()), pageNumber(b), imageSize(c), options(d){}
+        PageRenderRequest(quint64 requestId, int requestPageNumber, QSize requestImageSize, QPdfDocumentRenderOptions renderOptions)
+            : id(requestId), timestamp(QTime::currentTime()), pageNumber(requestPageNumber), imageSize(requestImageSize), options(renderOptions){}
 
         quint64 id;
         QTime timestamp;
@@ -100,7 +100,7 @@ private:
         if (m_requests.empty())
             return;
 
-        if (!(m_activeRequestJob.isFinished() || m_activeRequestJob.isCanceled()))
+        if (m_activeRequestJob.isRunning())
             return;
 
         const PageRenderRequest request = m_requests.takeFirst();
@@ -150,7 +150,7 @@ void QPdfViewPrivate::init()
     Q_Q(QPdfView);
 
     m_pageNavigator = new QPdfPageNavigator(q);
-    m_pageRenderer = new QPdfViewPageRenderer(q);
+    m_pageRenderer = new QPdfViewAsyncPageRenderer(q);
 }
 
 void QPdfViewPrivate::documentStatusChanged()
@@ -441,7 +441,7 @@ QPdfView::QPdfView(QWidget *parent)
     connect(d->m_pageNavigator, &QPdfPageNavigator::currentPageChanged, this,
             [d](int page){ d->currentPageChanged(page); });
 
-    connect(d->m_pageRenderer, &QPdfViewPageRenderer::pageRendered, this, [d](int pageNumber, QSize imageSize, const QImage& image, quint64 requestId, QTime requestTimestamp) {
+    connect(d->m_pageRenderer, &QPdfViewAsyncPageRenderer::pageRendered, this, [d](int pageNumber, QSize imageSize, const QImage& image, quint64 requestId, QTime requestTimestamp) {
         d->pageRendered(pageNumber, imageSize, image, requestId, requestTimestamp);
     });
 
@@ -654,6 +654,13 @@ qreal QPdfView::zoomFactor() const
     return d->m_zoomFactor;
 }
 
+QPdfView::ViewportAnchor QPdfView::transformationAnchor() const
+{
+    Q_D(const QPdfView);
+
+    return d->m_transformationAnchor;
+}
+
 void QPdfView::setZoomFactor(qreal factor)
 {
     Q_D(QPdfView);
@@ -667,7 +674,7 @@ void QPdfView::setZoomFactor(qreal factor)
     emit zoomFactorChanged(d->m_zoomFactor);
 }
 
-void QPdfView::setTransformationAnchor(ViewportAnchor anchor)
+void QPdfView::setTransformationAnchor(QPdfView::ViewportAnchor anchor)
 {
     Q_D(QPdfView);
     d->m_transformationAnchor = anchor;

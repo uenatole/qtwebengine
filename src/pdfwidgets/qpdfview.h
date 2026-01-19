@@ -49,7 +49,9 @@ public:
 
     enum class ViewportAnchor // like in QGraphicsView
     {
-        NoAnchor, AnchorViewCenter, AnchorUnderMouse
+        NoAnchor,
+        AnchorViewCenter,
+        AnchorUnderMouse
     };
     Q_ENUM(ViewportAnchor)
 
@@ -70,6 +72,7 @@ public:
     PageMode pageMode() const;
     ZoomMode zoomMode() const;
     qreal zoomFactor() const;
+    QPdfView::ViewportAnchor transformationAnchor() const;
 
     int pageSpacing() const;
     void setPageSpacing(int spacing);
@@ -81,7 +84,7 @@ public Q_SLOTS:
     void setPageMode(QPdfView::PageMode mode);
     void setZoomMode(QPdfView::ZoomMode mode);
     void setZoomFactor(qreal factor);
-    void setTransformationAnchor(ViewportAnchor anchor);
+    void setTransformationAnchor(QPdfView::ViewportAnchor anchor);
     void setCurrentSearchResultIndex(int currentResult);
 
 Q_SIGNALS:

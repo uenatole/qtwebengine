@@ -11,6 +11,7 @@ qt_internal_add_module(PdfWidgets
     LIBRARIES
         Qt::PdfPrivate
         Qt::WidgetsPrivate
+        Qt::Concurrent
     PUBLIC_LIBRARIES
         Qt::Core
         Qt::Gui

@@ -7,6 +7,7 @@
 
 #include "third_party/pdfium/public/fpdf_doc.h"
 #include "third_party/pdfium/public/fpdf_text.h"
+#include "third_party/pdfium/public/fpdf_progressive.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -18,6 +19,7 @@
 #include <QMutex>
 #include <QPixmap>
 #include <QVector2D>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <QtCore/private/qtools_p.h>
 
@@ -890,6 +892,8 @@ int QPdfDocument::pageIndexForLabel(const QString &label)
     return -1;
 }
 
+// TODO: merge ::render and ::renderAsync as much as possible
+
 /*!
     Renders the \a page into a QImage of size \a imageSize according to the
     provided \a renderOptions.
@@ -974,19 +978,16 @@ QImage QPdfDocument::render(int page, QSize imageSize, QPdfDocumentRenderOptions
     return result;
 }
 
-#include <QtConcurrent/QtConcurrentRun>
-#include "third_party/pdfium/public/fpdf_progressive.h"
-
 // NOTE: QPdfDocument is one-per-thread object so renderAsync is used only to provide cancellable rendering method.
 QFuture<QImage> QPdfDocument::renderAsync(int page, QSize imageSize, QPdfDocumentRenderOptions renderOptions) const
 {
     if (!d->doc || !d->checkPageComplete(page))
         return QtFuture::makeReadyValueFuture(QImage());
 
-    return QtConcurrent::run([this, page, imageSize, renderOptions](QPromise<QImage>& promise) {
+    return QtConcurrent::run([doc=d->doc, page, imageSize, renderOptions](QPromise<QImage>& promise) {
         const QPdfMutexLocker lock;
 
-        FPDF_PAGE pdfPage = FPDF_LoadPage(d->doc, page);
+        FPDF_PAGE pdfPage = FPDF_LoadPage(doc, page);
         if (!pdfPage) return;
 
         const QPdfDocumentRenderOptions::RenderFlags renderFlags = renderOptions.renderFlags();

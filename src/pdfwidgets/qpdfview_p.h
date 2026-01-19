@@ -24,7 +24,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class QPdfViewPageRenderer;
+class QPdfViewAsyncPageRenderer;
 
 class QPdfViewPrivate
 {
@@ -62,7 +62,7 @@ public:
     QPointer<QPdfDocument> m_document;
     QPointer<QPdfSearchModel> m_searchModel;
     QPdfPageNavigator* m_pageNavigator;
-    QPdfViewPageRenderer *m_pageRenderer;
+    QPdfViewAsyncPageRenderer *m_pageRenderer;
     QPdfLinkModel m_linkModel;
 
     QPdfView::PageMode m_pageMode;
