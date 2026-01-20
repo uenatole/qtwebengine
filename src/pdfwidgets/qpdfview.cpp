@@ -33,8 +33,8 @@ class QPdfViewAsyncPageRenderer : public QObject
 public:
     explicit QPdfViewAsyncPageRenderer(QObject* parent = nullptr) : QObject(parent)
     {
-        m_requestDelayTimer.setSingleShot(true);
-        connect(&m_requestDelayTimer, &QTimer::timeout, this, [&] {
+        m_requestDequeueSingleShotTimer.setSingleShot(true);
+        connect(&m_requestDequeueSingleShotTimer, &QTimer::timeout, this, [&] {
             tryDequeueRenderRequest();
         });
     }
@@ -47,7 +47,7 @@ public:
     void requestPageDelayed(int pageNumber, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions(), quint64 delayMs = 100)
     {
         if (const auto id = enqueuePageRenderRequest(pageNumber, imageSize, options); id) {
-            m_requestDelayTimer.start(delayMs);
+            m_requestDequeueSingleShotTimer.start(delayMs);
         }
     }
 
@@ -103,6 +103,12 @@ private:
         if (m_activeRequestJob.isRunning())
             return;
 
+        // The expected start time for page rendering has not yet arrived, so we shouldn't render it.
+        if (const auto timestamp = m_requests.front().timestamp, current = QTime::currentTime(); timestamp > current) {
+            m_requestDequeueSingleShotTimer.start(timestamp.msecsTo(current));
+            return;
+        }
+
         const PageRenderRequest request = m_requests.takeFirst();
 
         m_activeRequest = request;
@@ -144,7 +150,7 @@ private:
     std::optional<PageRenderRequest> m_activeRequest;
     QFuture<QPdfDocument::AsyncRenderResult> m_activeRequestJob;
 
-    QTimer m_requestDelayTimer;
+    QTimer m_requestDequeueSingleShotTimer;
 };
 
 QPdfViewPrivate::QPdfViewPrivate(QPdfView *q)
