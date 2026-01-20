@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Aliaksei Krayov <uenatole@gmail.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+
 #include <QApplication>
 #include <QPdfDocument>
 #include <QPdfView>
