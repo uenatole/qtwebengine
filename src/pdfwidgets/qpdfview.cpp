@@ -108,10 +108,29 @@ private:
         m_activeRequest = request;
         m_activeRequestJob = m_document->renderAsync(request.pageNumber, request.imageSize, request.options);
 
-        m_activeRequestJob.then([pThis = QPointer(this), request](const QImage& image) {
+        m_activeRequestJob.then([pThis = QPointer(this), request](const QPdfDocument::AsyncRenderResult& result) {
             if (pThis) {
                 pThis->m_activeRequest = std::nullopt;
-                emit pThis->pageRendered(request.pageNumber, request.imageSize, image, request.id, request.timestamp);
+
+                if (const QImage* image = std::get_if<QImage>(&result); image) {
+                    emit pThis->pageRendered(request.pageNumber, request.imageSize, *image, request.id, request.timestamp);
+                }
+                else {
+                    const QPdfDocument::RenderError error = std::get<QPdfDocument::RenderError>(result);
+
+                    switch (error) {
+                    case QPdfDocument::PageNotReady:
+                    case QPdfDocument::PageLoadFail:
+                        pThis->requestPageDelayed(request.pageNumber, request.imageSize, request.options);
+                        break;
+
+                    case QPdfDocument::PageRenderFail:
+                    case QPdfDocument::Unknown:
+                        // TODO: paint stub
+                        break;
+                    }
+                }
+
                 pThis->tryDequeueRenderRequest();
             }
         });
@@ -123,7 +142,7 @@ private:
     QList<PageRenderRequest> m_requests;
 
     std::optional<PageRenderRequest> m_activeRequest;
-    QFuture<QImage> m_activeRequestJob;
+    QFuture<QPdfDocument::AsyncRenderResult> m_activeRequestJob;
 
     QTimer m_requestDelayTimer;
 };

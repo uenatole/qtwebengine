@@ -979,16 +979,18 @@ QImage QPdfDocument::render(int page, QSize imageSize, QPdfDocumentRenderOptions
 }
 
 // NOTE: QPdfDocument is one-per-thread object so renderAsync is used only to provide cancellable rendering method.
-QFuture<QImage> QPdfDocument::renderAsync(int page, QSize imageSize, QPdfDocumentRenderOptions renderOptions) const
+QFuture<QPdfDocument::AsyncRenderResult> QPdfDocument::renderAsync(int page, QSize imageSize, QPdfDocumentRenderOptions renderOptions) const
 {
     if (!d->doc || !d->checkPageComplete(page))
-        return QtFuture::makeReadyValueFuture(QImage());
+        return QtFuture::makeReadyValueFuture(AsyncRenderResult { PageNotReady });
 
-    return QtConcurrent::run([doc=d->doc, page, imageSize, renderOptions](QPromise<QImage>& promise) {
+    return QtConcurrent::run([doc=d->doc, page, imageSize, renderOptions](QPromise<std::variant<QImage, RenderError>>& promise) {
         const QPdfMutexLocker lock;
 
         FPDF_PAGE pdfPage = FPDF_LoadPage(doc, page);
-        if (!pdfPage) return;
+        if (!pdfPage) {
+            promise.addResult(PageLoadFail);
+        }
 
         const QPdfDocumentRenderOptions::RenderFlags renderFlags = renderOptions.renderFlags();
         int flags = 0;
@@ -1031,11 +1033,15 @@ QFuture<QImage> QPdfDocument::renderAsync(int page, QSize imageSize, QPdfDocumen
 
         auto ret = FPDF_RenderPageBitmap_Start(bitmap, pdfPage, region.left(), region.top(), region.width(), region.height(), 0, flags, &pause);
 
-        // TODO: process other (ret) statuses
-
         if (ret == FPDF_RENDER_DONE) {
             FPDF_RenderPage_Close(pdfPage);
             promise.addResult(result);
+        }
+        else if (ret == FPDF_RENDER_FAILED) {
+            promise.addResult(PageRenderFail);
+        }
+        else if (ret == FPDF_RENDER_TOBECONTINUED && !promise.isCanceled()) {
+            promise.addResult(Unknown);
         }
 
         FPDFBitmap_Destroy(bitmap);

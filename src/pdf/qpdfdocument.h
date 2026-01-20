@@ -95,7 +95,17 @@ public:
     QAbstractListModel *pageModel();
 
     QImage render(int page, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions());
-    QFuture<QImage> renderAsync(int page, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions()) const;
+
+    enum RenderError {
+        PageNotReady,
+        PageLoadFail,
+        PageRenderFail,
+        Unknown = 254
+    };
+
+    using AsyncRenderResult = std::variant<QImage, RenderError>;
+
+    QFuture<AsyncRenderResult> renderAsync(int page, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions()) const;
 
     Q_INVOKABLE QPdfSelection getSelection(int page, QPointF start, QPointF end);
     Q_INVOKABLE QPdfSelection getSelectionAtIndex(int page, int startIndex, int maxLength);
