@@ -42,7 +42,8 @@ qt_internal_add_module(Pdf
     SBOM_INCOMPLETE_3RD_PARTY_DEPENDENCIES
 )
 
-add_subdirectory(plugins/imageformats/pdf)
+# NOTE: this causes conflicts if submodule is used alongside system-wide Qt
+#add_subdirectory(plugins/imageformats/pdf)
 
 get_install_config(config)
 get_architectures(archs)
