@@ -7,6 +7,7 @@
 
 #include "third_party/pdfium/public/fpdf_doc.h"
 #include "third_party/pdfium/public/fpdf_text.h"
+#include "third_party/pdfium/public/fpdf_progressive.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -972,6 +973,46 @@ QImage QPdfDocument::render(int page, QSize imageSize, QPdfDocumentRenderOptions
 
     FPDF_ClosePage(pdfPage);
     return result;
+}
+
+QImage QPdfDocument::render2(int page, QSize imageSize, QSharedPointer<bool> stop) const
+{
+    if (!d->doc || !d->checkPageComplete(page))
+        return QImage();
+
+    const QPdfMutexLocker lock;
+
+    FPDF_PAGE pdfPage = FPDF_LoadPage(d->doc, page);
+    if (!pdfPage)
+        return QImage();
+
+    QRect region { 0, 0, imageSize.width(), imageSize.height() };
+
+    IFSDK_PAUSE pause;
+    pause.version = 1;
+    pause.user = stop.get();
+
+    // Link IFSDK_PAUSE interface with QFuture cancellation interface
+    pause.NeedToPauseNow = [](IFSDK_PAUSE* pause) -> FPDF_BOOL {
+        const auto p = static_cast<bool*>(pause->user);
+        return *p;
+    };
+
+    QImage result(imageSize, QImage::Format_ARGB32);
+    result.fill(Qt::transparent);
+    FPDF_BITMAP bitmap = FPDFBitmap_CreateEx(result.width(), result.height(), FPDFBitmap_BGRA, result.bits(), result.bytesPerLine());
+
+    auto ret = FPDF_RenderPageBitmap_Start(bitmap, pdfPage, region.left(), region.top(), region.width(), region.height(), 0, 0, &pause);
+
+    FPDF_RenderPage_Close(pdfPage);
+    FPDFBitmap_Destroy(bitmap);
+    FPDF_ClosePage(pdfPage);
+
+    if (ret == FPDF_RENDER_DONE) {
+        return result;
+    }
+
+    return QImage();
 }
 
 /*!
