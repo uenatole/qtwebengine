@@ -94,7 +94,13 @@ public:
     QAbstractListModel *pageModel();
 
     QImage render(int page, QSize imageSize, QPdfDocumentRenderOptions options = QPdfDocumentRenderOptions());
-    QImage render2(int page, QSize imageSize, QSharedPointer<bool> stop = nullptr) const;
+
+    struct ICancel {
+        virtual ~ICancel() = default;
+        virtual bool isCancelled() = 0;
+    };
+
+    QImage render2(int page, QSize imageSize, ICancel* cancel = nullptr) const;
 
     Q_INVOKABLE QPdfSelection getSelection(int page, QPointF start, QPointF end);
     Q_INVOKABLE QPdfSelection getSelectionAtIndex(int page, int startIndex, int maxLength);

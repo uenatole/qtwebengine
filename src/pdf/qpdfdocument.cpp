@@ -975,10 +975,10 @@ QImage QPdfDocument::render(int page, QSize imageSize, QPdfDocumentRenderOptions
     return result;
 }
 
-QImage QPdfDocument::render2(int page, QSize imageSize, QSharedPointer<bool> stop) const
+QImage QPdfDocument::render2(int page, QSize imageSize, ICancel* cancel) const
 {
     if (!d->doc || !d->checkPageComplete(page))
-        return QImage();
+        return {};
 
     const QPdfMutexLocker lock;
 
@@ -990,12 +990,12 @@ QImage QPdfDocument::render2(int page, QSize imageSize, QSharedPointer<bool> sto
 
     IFSDK_PAUSE pause;
     pause.version = 1;
-    pause.user = stop.get();
+    pause.user = cancel;
 
-    // Link IFSDK_PAUSE interface with QFuture cancellation interface
+    // Link IFSDK_PAUSE interface with ICancel interface
     pause.NeedToPauseNow = [](IFSDK_PAUSE* pause) -> FPDF_BOOL {
-        const auto p = static_cast<bool*>(pause->user);
-        return *p;
+        const auto p = static_cast<ICancel*>(pause->user);
+        return p ? p->isCancelled() : false;
     };
 
     QImage result(imageSize, QImage::Format_ARGB32);
@@ -1012,7 +1012,7 @@ QImage QPdfDocument::render2(int page, QSize imageSize, QSharedPointer<bool> sto
         return result;
     }
 
-    return QImage();
+    return {};
 }
 
 /*!
