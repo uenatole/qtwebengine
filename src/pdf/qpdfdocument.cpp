@@ -1025,44 +1025,46 @@ QPdfSelection QPdfDocument::getSelection(int page, QPointF start, QPointF end)
     FPDF_PAGE pdfPage = FPDF_LoadPage(d->doc, page);
     const QPointF pageStart = d->mapViewToPage(pdfPage, start);
     const QPointF pageEnd = d->mapViewToPage(pdfPage, end);
+    const QRectF pageBounds = QRectF(pageStart, pageEnd);
+
     FPDF_TEXTPAGE textPage = FPDFText_LoadPage(pdfPage);
-    int startIndex = FPDFText_GetCharIndexAtPos(textPage, pageStart.x(), pageStart.y(),
-                                                CharacterHitTolerance, CharacterHitTolerance);
-    int endIndex = FPDFText_GetCharIndexAtPos(textPage, pageEnd.x(), pageEnd.y(),
-                                              CharacterHitTolerance, CharacterHitTolerance);
 
     QPdfSelection result;
 
-    if (startIndex >= 0 && endIndex != startIndex) {
-        if (startIndex > endIndex)
-            qSwap(startIndex, endIndex);
+    const int charCount = FPDFText_CountChars(textPage);
 
-        // If the given end position is past the end of the line, i.e. if the right edge of the last character's
-        // bounding box is closer to it than the left edge is, then extend the char range by one
-        QRectF endCharBox = d->getCharBox(pdfPage, textPage, endIndex);
-        if (qAbs(endCharBox.right() - end.x()) < qAbs(endCharBox.x() - end.x()))
-            ++endIndex;
+    // Находим начальный и конечный индексы символов
+    int startIndex = -1;
+    int endIndex = -1;
 
-        int count = endIndex - startIndex;
-        QString text = d->getText(textPage, startIndex, count);
-        QList<QPolygonF> bounds;
-        QRectF hull;
-        int rectCount = FPDFText_CountRects(textPage, startIndex, endIndex - startIndex);
-        for (int i = 0; i < rectCount; ++i) {
-            double l, r, b, t;
-            FPDFText_GetRect(textPage, i, &l, &t, &r, &b);
-            const QRectF rect = d->mapPageToView(pdfPage, l, t, r, b);
-            if (hull.isNull())
-                hull = rect;
-            else
-                hull = hull.united(rect);
-            bounds << QPolygonF(rect);
+    QList<QPolygonF> charBounds;
+    QRectF boundingRect;
+
+    for (int i = 0; i < charCount; ++i) {
+        double l, r, b, t;
+        FPDFText_GetCharBox(textPage, i, &l, &r, &b, &t);
+        // Проверяем, попадает ли стартовая точка в этот символ
+        if (QRectF pageCharBox(QPointF(l, t), QPointF(r, b)); pageBounds.intersects(pageCharBox)) {
+            QRectF viewCharBox = d->mapPageToView(pdfPage, l, t, r, b);
+
+            if (startIndex == -1 ) {
+                startIndex = i;
+                boundingRect = viewCharBox;
+            }
+            endIndex = i;
+
+            charBounds.append(QPolygonF(viewCharBox));
+            boundingRect |= viewCharBox;
         }
-        qCDebug(qLcDoc) << page << start << "->" << end << "found" << startIndex << "->" << endIndex << text;
-        result = QPdfSelection(text, bounds, hull, startIndex, endIndex);
-    } else {
-        qCDebug(qLcDoc) << page << start << "->" << end << "nothing found";
     }
+    if (startIndex == -1)
+        return result;
+
+    if (endIndex == -1)
+        endIndex = charCount;
+
+    // Создаем результат
+    result = QPdfSelection({}, charBounds, boundingRect, startIndex, endIndex);
 
     FPDFText_ClosePage(textPage);
     FPDF_ClosePage(pdfPage);
