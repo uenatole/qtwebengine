@@ -1037,8 +1037,30 @@ QPdfSelection QPdfDocument::getSelection(int page, QPointF start, QPointF end)
     int startIndex = -1;
     int endIndex = -1;
 
-    QList<QPolygonF> segments;
+    // Find selection boundaries
+    for (int i = 0; i < charCount; ++i) {
+        double l, r, b, t;
+        FPDFText_GetCharBox(textPage, i, &l, &r, &b, &t);
 
+        // Find selection boundaries
+        if (QRectF pageCharBox(QPointF(l, t), QPointF(r, b)); pageBounds.intersects(pageCharBox)) {
+            if (startIndex == -1)
+                startIndex = i;
+
+            endIndex = i;
+        }
+    }
+
+    if (startIndex == -1)
+        return result;
+
+    if (endIndex == -1)
+        endIndex = charCount;
+    else
+        endIndex += 1;
+
+    // Find line segments
+    QList<QPolygonF> segments;
     QRectF textRect; // text bounds
     QRectF lineRect; // text line bounds
 
@@ -1048,42 +1070,31 @@ QPdfSelection QPdfDocument::getSelection(int page, QPointF start, QPointF end)
         return charRect.top() <= lineRect.bottom() && charRect.bottom() >= lineRect.top();
     };
 
-    for (int i = 0; i < charCount; ++i) {
+    for (int i = startIndex; i < endIndex; ++i)
+    {
         double l, r, b, t;
         FPDFText_GetCharBox(textPage, i, &l, &r, &b, &t);
 
-        if (QRectF pageCharBox(QPointF(l, t), QPointF(r, b)); pageBounds.intersects(pageCharBox)) {
-            QRectF viewCharBox = d->mapPageToView(pdfPage, l, t, r, b);
+        QRectF viewCharBox = d->mapPageToView(pdfPage, l, t, r, b);
 
-            if (startIndex == -1)
-                startIndex = i;
-
-            if (lineRect.isNull())
-                lineRect = viewCharBox;
+        if (lineRect.isNull())
+            lineRect = viewCharBox;
+        else
+        {
+            if (isOnLine(lineRect, viewCharBox))
+                lineRect = lineRect.united(viewCharBox);
             else
             {
-                if (isOnLine(lineRect, viewCharBox))
-                    lineRect = lineRect.united(viewCharBox);
-                else
-                {
-                    segments.append(QPolygonF(lineRect));
-                    lineRect = viewCharBox;
-                }
+                segments.append(QPolygonF(lineRect));
+                lineRect = viewCharBox;
             }
-
-            endIndex = i;
-            textRect |= viewCharBox;
         }
+
+        textRect |= viewCharBox;
     }
 
     if (!lineRect.isNull())
         segments.append(QPolygonF(lineRect));
-
-    if (startIndex == -1)
-        return result;
-
-    if (endIndex == -1)
-        endIndex = charCount;
 
     // Создаем результат
     const QString text = d->getText(textPage, startIndex, endIndex - startIndex + 1);
