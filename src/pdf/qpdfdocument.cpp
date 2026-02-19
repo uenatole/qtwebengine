@@ -1086,7 +1086,8 @@ QPdfSelection QPdfDocument::getSelection(int page, QPointF start, QPointF end)
         endIndex = charCount;
 
     // Создаем результат
-    result = QPdfSelection({}, segments, textRect, startIndex, endIndex);
+    const QString text = d->getText(textPage, startIndex, endIndex - startIndex + 1);
+    result = QPdfSelection(text, segments, textRect, startIndex, endIndex);
 
     FPDFText_ClosePage(textPage);
     FPDF_ClosePage(pdfPage);
