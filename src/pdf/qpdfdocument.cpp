@@ -1097,7 +1097,7 @@ QPdfSelection QPdfDocument::getSelection(int page, QPointF start, QPointF end)
         segments.append(QPolygonF(lineRect));
 
     // Создаем результат
-    const QString text = d->getText(textPage, startIndex, endIndex - startIndex + 1);
+    const QString text = d->getText(textPage, startIndex, endIndex - startIndex);
     result = QPdfSelection(text, segments, textRect, startIndex, endIndex);
 
     FPDFText_ClosePage(textPage);
