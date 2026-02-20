@@ -27,6 +27,7 @@ class QPdfSelection
 
 public:
     Q_PDF_EXPORT ~QPdfSelection();
+    Q_PDF_EXPORT QPdfSelection();
     Q_PDF_EXPORT QPdfSelection(const QPdfSelection &other);
     Q_PDF_EXPORT QPdfSelection &operator=(const QPdfSelection &other);
 
@@ -46,7 +47,6 @@ public:
 #endif
 
 private:
-    QPdfSelection();
     QPdfSelection(const QString &text, QList<QPolygonF> bounds, QRectF boundingRect, int startIndex, int endIndex);
     QPdfSelection(QPdfSelectionPrivate *d);
     friend class QPdfDocument;

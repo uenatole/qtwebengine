@@ -54,7 +54,7 @@ QPdfLink &QPdfLink::operator=(const QPdfLink &other) = default;
 */
 bool QPdfLink::isValid() const
 {
-    return d->page >= 0;
+    return !d->rects.isEmpty();
 }
 
 /*!
