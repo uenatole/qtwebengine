@@ -85,6 +85,8 @@ public:
     QRectF mapPageToView(FPDF_PAGE pdfPage, double left, double top, double right, double bottom) const;
     QPointF mapViewToPage(FPDF_PAGE pdfPage, QPointF position) const;
 
+    QPair<int, int> findTextRangeAtBounds(int page, QPointF first, QPointF second) const;
+
     // FPDF takes the rotation parameter as an int.
     // This enum is mapping the int values defined in fpdfview.h:956.
     // (not using enum class to ensure int convertability)

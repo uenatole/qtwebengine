@@ -102,9 +102,15 @@ public:
 
     QImage render2(int page, QSize imageSize, ICancel* cancel = nullptr) const;
 
-    Q_INVOKABLE QPdfSelection getSelection(int page, QPointF start, QPointF end);
-    Q_INVOKABLE QPdfSelection getSelectionAtIndex(int page, int startIndex, int maxLength);
-    Q_INVOKABLE QPdfSelection getAllText(int page);
+    Q_INVOKABLE [[deprecated]] QPdfSelection getSelection(int page, QPointF start, QPointF end);
+    Q_INVOKABLE [[deprecated]] QPdfSelection getSelectionAtIndex(int page, int startIndex, int maxLength);
+    Q_INVOKABLE [[deprecated]] QPdfSelection getAllText(int page);
+
+    Q_INVOKABLE QList<QRectF> getCharGeometry(int page, QPointF start, QPointF end);
+    Q_INVOKABLE QList<QRectF> getCharGeometryAtIndex(int page, int startIndex = 0, int endIndex = -1);
+
+    Q_INVOKABLE QString getTextContents(int page, QPointF start, QPointF end);
+    Q_INVOKABLE QString getTextContentsAtIndex(int page, int startIndex, int endIndex);
 
 Q_SIGNALS:
     void passwordChanged();

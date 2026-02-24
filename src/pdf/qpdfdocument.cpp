@@ -526,6 +526,42 @@ QPointF QPdfDocumentPrivate::mapViewToPage(FPDF_PAGE pdfPage, QPointF position) 
     return {};
 }
 
+QPair<int, int> QPdfDocumentPrivate::findTextRangeAtBounds(int page, QPointF start, QPointF end) const
+{
+    const QPdfMutexLocker lock;
+    FPDF_PAGE pdfPage = FPDF_LoadPage(doc, page);
+    FPDF_TEXTPAGE textPage = FPDFText_LoadPage(pdfPage);
+
+    const QPointF pageStart = mapViewToPage(pdfPage, start);
+    const QPointF pageEnd = mapViewToPage(pdfPage, end);
+    const QRectF pageBounds = QRectF(pageStart, pageEnd);
+
+    const int charCount = FPDFText_CountChars(textPage);
+
+    // Находим начальный и конечный индексы символов
+    int startIndex = -1;
+    int endIndex = -1;
+
+    // Find selection boundaries
+    for (int i = 0; i < charCount; ++i) {
+        double l, r, b, t;
+        FPDFText_GetCharBox(textPage, i, &l, &r, &b, &t);
+
+        // Find selection boundaries
+        if (QRectF pageCharBox(QPointF(l, t), QPointF(r, b)); pageBounds.intersects(pageCharBox)) {
+            if (startIndex == -1)
+                startIndex = i;
+
+            endIndex = i;
+        }
+    }
+
+    FPDF_ClosePage(pdfPage);
+    FPDFText_ClosePage(textPage);
+
+    if (startIndex == -1) return { -1, -1 };
+    return { startIndex, endIndex == -1 ? charCount : endIndex + 1 };
+}
 QPdfDocumentPrivate::TextPosition QPdfDocumentPrivate::hitTest(int page, QPointF position)
 {
     const QPdfMutexLocker lock;
@@ -1181,6 +1217,61 @@ QPdfSelection QPdfDocument::getAllText(int page)
     FPDF_ClosePage(pdfPage);
 
     return QPdfSelection(text, bounds, hull, 0, count);
+}
+
+QList<QRectF> QPdfDocument::getCharGeometry(int page, QPointF start, QPointF end)
+{
+    const auto [startIndex, endIndex] = d->findTextRangeAtBounds(page, start, end);
+    return getCharGeometryAtIndex(page, startIndex, endIndex);
+}
+
+QList<QRectF> QPdfDocument::getCharGeometryAtIndex(int page, int startIndex, int endIndex)
+{
+    if (startIndex >= endIndex && endIndex != -1)
+        return {};
+
+    const QPdfMutexLocker lock;
+    const FPDF_PAGE pdfPage = FPDF_LoadPage(d->doc, page);
+    const FPDF_TEXTPAGE textPage = FPDFText_LoadPage(pdfPage);
+
+    if (endIndex == -1)
+        endIndex = FPDFText_CountChars(textPage);
+
+    QList<QRectF> rects;
+
+    for (int i = startIndex; i < endIndex; i++)
+    {
+        double l, r, b, t;
+        FPDFText_GetCharBox(textPage, i, &l, &r, &b, &t);
+        QRectF viewCharBox = d->mapPageToView(pdfPage, l, t, r, b);
+
+        rects.append(viewCharBox);
+    }
+
+    FPDF_ClosePage(pdfPage);
+    FPDFText_ClosePage(textPage);
+
+    return rects;
+}
+
+QString QPdfDocument::getTextContents(int page, QPointF start, QPointF end)
+{
+    const auto [startIndex, endIndex] = d->findTextRangeAtBounds(page, start, end);
+    return getTextContentsAtIndex(page, startIndex, endIndex);
+}
+
+QString QPdfDocument::getTextContentsAtIndex(int page, int startIndex, int endIndex)
+{
+    const QPdfMutexLocker lock;
+    FPDF_PAGE pdfPage = FPDF_LoadPage(d->doc, page);
+    FPDF_TEXTPAGE textPage = FPDFText_LoadPage(pdfPage);
+
+    const QString text = d->getText(textPage, startIndex, endIndex - startIndex);
+
+    FPDF_ClosePage(pdfPage);
+    FPDFText_ClosePage(textPage);
+
+    return text;
 }
 
 QT_END_NAMESPACE
